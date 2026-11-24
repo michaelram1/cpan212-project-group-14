@@ -1,11 +1,13 @@
-# TripTally API — M2 Express REST API
+# TripTally API — M4 MongoDB REST API
 
 ## Install and run
 
-Node.js **24** required; Express **5** and zod. The API stores records in **memory** (as required before M4); changes reset when the server restarts.
+Node.js **24** required; Express **5**, Mongoose **9** and zod. Records persist in MongoDB.
 
 ```bash
 npm install
+# Copy .env.example to .env and set MONGODB_URI
+npm run seed
 npm run dev
 ```
 
@@ -33,7 +35,7 @@ Create/update invalid body → 400 with field details. Unknown id or route → 4
 
 Data validation:
 - Trip: title 3–80, destination 2–80, startDate/endDate YYYY-MM-DD and chronological, budgetTotal positive, budgetCurrency CAD/USD/EUR/GBP, optional notes ≤500. Budget currency cannot be changed after creation.
-- Expense: existing tripId UUID; title 2–80; category `transport|lodging|food|activities|shopping|other`; positive amountOriginal; originalCurrency CAD/USD/EUR/GBP; valid date; optional notes ≤300.
+- Expense: existing tripId ObjectId; title 2–80; category `transport|lodging|food|activities|shopping|other`; positive amountOriginal; originalCurrency CAD/USD/EUR/GBP; valid date; optional notes ≤300.
 - IDs, createdAt, convertedAmount, fxRate and fxRateDate are server-generated and cannot be overwritten by client request bodies.
 
 Frankfurter docs: https://frankfurter.dev/ . The server fetches `/v2/rate/{from}/{to}` using `AbortSignal.timeout(3000)`. One-hour in-memory cached rates are keyed by currency pair and log `FX cache hit: USD:CAD` on reuse. We return our own `{from,to,amount,rate,convertedAmount,rateDate}` JSON. No API key is needed.
@@ -50,7 +52,7 @@ curl -i http://localhost:4000/api/trips
 curl -i -X POST http://localhost:4000/api/trips -H 'Content-Type: application/json' -d '{"title":"Rome Weekend","destination":"Rome, Italy","startDate":"2027-05-10","endDate":"2027-05-14","budgetTotal":1200,"budgetCurrency":"CAD","notes":"Museums and cafés"}'
 
 # Replace the placeholder with the id from that 201 response:
-TRIP_ID='PASTE_RETURNED_TRIP_UUID'
+TRIP_ID='PASTE_RETURNED_TRIP_OBJECT_ID'
 
 # 3. Get one trip: expected 200
 curl -i "http://localhost:4000/api/trips/$TRIP_ID"
@@ -61,11 +63,11 @@ curl -i -X PATCH "http://localhost:4000/api/trips/$TRIP_ID" -H 'Content-Type: ap
 # 5. List this trip's expenses: expected 200 (empty initially)
 curl -i "http://localhost:4000/api/expenses?tripId=$TRIP_ID"
 
-# 6. Create an expense: expected 201. Replace PASTE_RETURNED_TRIP_UUID with the same trip id:
-curl -i -X POST http://localhost:4000/api/expenses -H 'Content-Type: application/json' -d '{"tripId":"PASTE_RETURNED_TRIP_UUID","title":"Metro ticket","category":"transport","amountOriginal":28,"originalCurrency":"CAD","spentOn":"2027-05-10","notes":"Airport transfer"}'
+# 6. Create an expense: expected 201. Replace PASTE_RETURNED_TRIP_OBJECT_ID with the same trip id:
+curl -i -X POST http://localhost:4000/api/expenses -H 'Content-Type: application/json' -d '{"tripId":"PASTE_RETURNED_TRIP_OBJECT_ID","title":"Metro ticket","category":"transport","amountOriginal":28,"originalCurrency":"CAD","spentOn":"2027-05-10","notes":"Airport transfer"}'
 
 # Replace this placeholder with the expense id from the 201 response:
-EXPENSE_ID='PASTE_RETURNED_EXPENSE_UUID'
+EXPENSE_ID='PASTE_RETURNED_EXPENSE_OBJECT_ID'
 
 # 7. Get one expense: expected 200
 curl -i "http://localhost:4000/api/expenses/$EXPENSE_ID"
@@ -99,4 +101,17 @@ curl -i -X DELETE "http://localhost:4000/api/trips/$TRIP_ID"
 
 ## Contributions
 
-Update the root `CONTRIBUTIONS.md` M2 section with real members and actual commits/PRs. Root `README.md` contains the AI use disclosure. Do not commit secrets or dependency folders.
+Update the root `CONTRIBUTIONS.md` M4 section with real members and actual commits/PRs. Root `README.md` contains the AI use disclosure. Do not commit secrets or dependency folders.
+
+## M4 database configuration
+
+`MONGODB_URI` is required before the server starts. Use a running local MongoDB instance or an Atlas URI. `npm run seed` resets both collections (30 trips, 60 expenses); never run against production.
+
+Trip list query parameters: `currency` (CAD/USD/EUR/GBP), `sort` (title, destination, startDate, budgetTotal, createdAt, optionally prefixed with `-`), `page` (default 1), `limit` (default 10, maximum 50). Invalid sort fields return 400.
+
+```bash
+curl -i "http://localhost:4000/api/trips?currency=CAD&sort=-budgetTotal&page=1&limit=5" # 200
+curl -i "http://localhost:4000/api/trips?sort=unknown" # 400
+```
+
+Set `MONGODB_TEST_URI` to a dedicated test database for integration tests; the test creates and removes its own records.

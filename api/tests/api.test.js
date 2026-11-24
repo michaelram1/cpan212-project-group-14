@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
 import { app } from '../src/app.js';
 
-test('trip/expense CRUD, validation, 404 and delete cascade', async () => {
+test('trip/expense CRUD, validation, 404 and delete cascade', { skip: !process.env.MONGODB_TEST_URI }, async () => {
+  mongoose.set('sanitizeFilter', true);
+  await mongoose.connect(process.env.MONGODB_TEST_URI);
+  let createdId;
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, () => resolve(instance));
   });
@@ -15,7 +19,8 @@ test('trip/expense CRUD, validation, 404 and delete cascade', async () => {
   try {
     const list = await request('/api/trips');
     assert.equal(list.status, 200);
-    assert.ok((await list.json()).items.length >= 3);
+    assert.ok(Array.isArray((await list.json()).items));
+    assert.equal((await request('/api/trips?sort=bad')).status, 400);
 
     const invalid = await request('/api/trips', 'POST', { title: '' });
     assert.equal(invalid.status, 400);
@@ -28,6 +33,7 @@ test('trip/expense CRUD, validation, 404 and delete cascade', async () => {
     assert.equal(create.status, 201);
     const trip = await create.json();
     assert.ok(trip.id);
+    createdId = trip.id;
 
     const edit = await request(`/api/trips/${trip.id}`, 'PATCH', { budgetTotal: 750 });
     assert.equal(edit.status, 200);
@@ -44,6 +50,7 @@ test('trip/expense CRUD, validation, 404 and delete cascade', async () => {
 
     const expenseRead = await request(`/api/expenses/${expense.id}`);
     assert.equal(expenseRead.status, 200);
+    assert.equal((await expenseRead.json()).trip.id, trip.id);
 
     const expenseEdit = await request(`/api/expenses/${expense.id}`, 'PATCH', { title: 'Train ticket' });
     assert.equal(expenseEdit.status, 200);
@@ -63,6 +70,8 @@ test('trip/expense CRUD, validation, 404 and delete cascade', async () => {
     assert.equal(unknownRoute.status, 404);
     assert.equal(typeof (await unknownRoute.json()).error.message, 'string');
   } finally {
+    if (createdId) await request(`/api/trips/${createdId}`, 'DELETE');
     await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+    await mongoose.disconnect();
   }
 });

@@ -20,10 +20,10 @@ const tripFields = z.object({
 }).strict();
 
 export const createTripSchema = tripFields;
-export const updateTripSchema = tripFields.omit({ budgetCurrency: true }).partial().strict();
+export const updateTripSchema = tripFields.omit({ budgetCurrency: true, notes: true }).partial().extend({ notes: z.string().trim().max(500).optional() }).strict();
 
 const expenseFields = z.object({
-  tripId: z.string().uuid(),
+  tripId: z.string(),
   title: z.string().trim().min(2).max(80),
   category: z.enum(categories),
   amountOriginal: z.number().finite().positive(),
@@ -32,7 +32,7 @@ const expenseFields = z.object({
   notes: z.string().trim().max(300).optional().default('')
 }).strict();
 export const createExpenseSchema = expenseFields;
-export const updateExpenseSchema = expenseFields.omit({ tripId: true }).partial().strict();
+export const updateExpenseSchema = expenseFields.omit({ tripId: true, notes: true }).partial().extend({ notes: z.string().trim().max(300).optional() }).strict();
 export const previewRateSchema = z.object({
   from: z.enum(currencies),
   to: z.enum(currencies),
